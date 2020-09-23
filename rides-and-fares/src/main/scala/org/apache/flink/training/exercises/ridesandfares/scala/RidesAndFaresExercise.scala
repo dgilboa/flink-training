@@ -18,6 +18,8 @@
 
 package org.apache.flink.training.exercises.ridesandfares.scala
 
+import org.apache.flink.api.common.state.{ValueState, ValueStateDescriptor}
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.co.RichCoFlatMapFunction
 import org.apache.flink.streaming.api.scala.{StreamExecutionEnvironment, _}
 import org.apache.flink.training.exercises.common.datatypes.{TaxiFare, TaxiRide}
@@ -60,11 +62,32 @@ object RidesAndFaresExercise {
 
   class EnrichmentFunction extends RichCoFlatMapFunction[TaxiRide, TaxiFare, (TaxiRide, TaxiFare)] {
 
+    // setting them as a lazy inits the runtime context correctly. 
+    lazy val rides: ValueState[TaxiRide] = getRuntimeContext.getState(
+      new ValueStateDescriptor[TaxiRide]("rids", classOf[TaxiRide])
+    )
+    lazy val fares: ValueState[TaxiFare] = getRuntimeContext.getState(
+      new ValueStateDescriptor[TaxiFare]("rids", classOf[TaxiFare])
+    )
+
     override def flatMap1(ride: TaxiRide, out: Collector[(TaxiRide, TaxiFare)]): Unit = {
-      throw new MissingSolutionException()
+      val fare = fares.value
+      if (fare != null){
+        fares.clear()
+        out.collect((ride, fare))
+      } else {
+        rides.update(ride)
+      }
     }
 
     override def flatMap2(fare: TaxiFare, out: Collector[(TaxiRide, TaxiFare)]): Unit = {
+      val ride = rides.value
+      if (ride != null){
+        rides.clear()
+        out.collect((ride, fare))
+      } else {
+        fares.update(fare)
+      }
     }
 
   }
