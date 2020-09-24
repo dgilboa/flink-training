@@ -62,7 +62,7 @@ object RidesAndFaresExercise {
 
   class EnrichmentFunction extends RichCoFlatMapFunction[TaxiRide, TaxiFare, (TaxiRide, TaxiFare)] {
 
-    // setting them as a lazy inits the runtime context correctly. 
+    // setting them as a lazy inits the runtime context correctly.
     lazy val rides: ValueState[TaxiRide] = getRuntimeContext.getState(
       new ValueStateDescriptor[TaxiRide]("rids", classOf[TaxiRide])
     )

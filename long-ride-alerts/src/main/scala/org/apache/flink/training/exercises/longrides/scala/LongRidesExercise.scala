@@ -18,15 +18,18 @@
 
 package org.apache.flink.training.exercises.longrides.scala
 
-import org.apache.flink.configuration.Configuration
+import org.apache.flink.api.common.state.{ValueState, ValueStateDescriptor}
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction
 import org.apache.flink.streaming.api.scala.{StreamExecutionEnvironment, _}
 import org.apache.flink.training.exercises.common.datatypes.TaxiRide
 import org.apache.flink.training.exercises.common.sources.TaxiRideGenerator
+import org.apache.flink.training.exercises.common.utils.ExerciseBase
 import org.apache.flink.training.exercises.common.utils.ExerciseBase._
-import org.apache.flink.training.exercises.common.utils.{ExerciseBase, MissingSolutionException}
 import org.apache.flink.util.Collector
+
+import scala.concurrent.duration.DurationInt
+
 
 /**
   * The "Long Ride Alerts" exercise of the Flink training in the docs.
@@ -57,20 +60,37 @@ object LongRidesExercise {
 
   class ImplementMeFunction extends KeyedProcessFunction[Long, TaxiRide, TaxiRide] {
 
-    override def open(parameters: Configuration): Unit = {
-      throw new MissingSolutionException()
-    }
+    lazy val knownRideState: ValueState[TaxiRide] =
+      getRuntimeContext.getState(new ValueStateDescriptor[TaxiRide]("known ride event", classOf[TaxiRide]))
 
     override def processElement(ride: TaxiRide,
                                 context: KeyedProcessFunction[Long, TaxiRide, TaxiRide]#Context,
                                 out: Collector[TaxiRide]): Unit = {
+      val knownRide = knownRideState.value()
+
+      if (knownRide == null) {
+        knownRideState.update(ride)
+        if (ride.isStart){
+          context.timerService().registerEventTimeTimer(calcTimer(ride))
+        }
+      } else {
+        if (!ride.isStart){
+          context.timerService().deleteEventTimeTimer(calcTimer(knownRide))
+        }
+        knownRideState.clear()
+      }
+
+
     }
 
     override def onTimer(timestamp: Long,
                          ctx: KeyedProcessFunction[Long, TaxiRide, TaxiRide]#OnTimerContext,
                          out: Collector[TaxiRide]): Unit = {
+      out.collect(knownRideState.value())
+      knownRideState.clear()
     }
 
+    def calcTimer(ride: TaxiRide) = ride.startTime.getEpochSecond + 2.hours.toMillis
   }
 
 }
